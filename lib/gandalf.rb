@@ -1,20 +1,18 @@
 require "active_support/concern"
-require "gandalf/ability"
-require "gandalf/rule"
+require "gandalf/policy"
+require "gandalf/policy_support"
 require "gandalf/version"
 
 module Gandalf
   extend ActiveSupport::Concern
 
-  class AbilityNotImplemented < NotImplementedError; end
-  class Unauthorized < Exception; end
-  class AuthenticationRequired < Exception; end
+  class Unauthorized < StandardError; end
+  class AuthenticationRequired < StandardError; end
 
   YouShallNotPass = AuthenticationRequired
   AuthorizationRequired = AuthenticationRequired
 
   included do
-    delegate :can?, :cannot?, :to => :current_ability
     helper_method :current_user, :signed_in?, :signed_out?, :can?, :cannot?
     hide_action *(Gandalf.instance_methods + [:can?, :cannot?])
   end
@@ -59,10 +57,18 @@ module Gandalf
     @current_user = user
   end
 
-  def current_ability
-    @current_ability ||= if defined? ::Ability
-      ::Ability.new current_user
-    end
+  def can? action, object
+    policy = object.respond_to?(:to_policy) && object.to_policy
+    can_do = !policy || policy.can?(action, current_user)
+
+    yield if block_given? && can_do
+    can_do
+  end
+
+  def cannot? *args
+    cannot_do = !can?(*args)
+    yield if block_given? && cannot_do
+    cannot_do
   end
 
   def sign_in user
@@ -125,25 +131,8 @@ end
     deny_access unless signed_in?
   end
 
-  def authorize
-    warn "[DEPRECATION] authorize is now deprecated, use authenticate instead."
-    authenticate
-  end
-
-  def authorize! action = action_name, subject = Object
-    unless current_ability
-      raise AbilityNotImplemented, """
-You have not defined an ability. To define an ability create an Object named Ability, or override current_ability in ApplicationController:
-
-<pre>
-def current_ability
-  @ability ||= MyCustomAbility.new current_user
-end
-</pre>
-"""
-    end
-
-    raise Unauthorized unless current_ability.can? action, subject
+  def authorize! action = action_name, object = nil
+    raise Unauthorized unless can? action, object
   end
 
   # CSRF protection in Rails >= 3.0.4

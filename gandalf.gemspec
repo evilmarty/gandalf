@@ -3,7 +3,7 @@ require File.expand_path('../lib/gandalf/version', __FILE__)
 
 Gem::Specification.new do |gem|
   gem.authors       = ["Marty Zalega"]
-  gem.email         = ["evil.marty@gmail.com"]
+  gem.email         = ["marty@zalega.me"]
   gem.description   = %q{Simply delegates authentication and authorization to your own implementation.}
   gem.summary       = %q{Manage user authentication and authorization.}
   gem.homepage      = "http://github.com/everydayhero/gandalf"

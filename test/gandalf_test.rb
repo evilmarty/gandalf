@@ -8,7 +8,6 @@ class GandalfTest < ActionController::TestCase
     include Gandalf
 
     attr_accessor :user
-    attr_writer :current_ability
 
     gandalf_retrieve_user :user
     gandalf_persist_user :user=
@@ -160,50 +159,143 @@ class GandalfTest < ActionController::TestCase
     end
   end
 
-  test "#current_ability should return nil" do
-    assert_nil @controller.current_ability
-  end
-
-  test "#current_ability should return ability" do
-    ability = Object.new
-    @controller.current_ability = ability
-
-    assert_equal ability, @controller.current_ability
-  end
-
-  test "#authorize! should raise except when current_ability is nil" do
-    assert_nil @controller.current_ability
-    assert_raises Gandalf::AbilityNotImplemented do
-      @controller.authorize! :test
-    end
-  end
-
-  test "#authorize! should raise except when action doesn't hit" do
-    ability = MiniTest::Mock.new
-    ability.expect :can?, false, [:test, Object]
-    @controller.current_ability = ability
+  test "#authorize! should raise except when cannot perform action" do
+    policy = MiniTest::Mock.new
+    policy.expect :!, false
+    policy.expect :can?, false, [:test, Object]
+    object = MiniTest::Mock.new
+    object.expect :to_policy, policy
 
     assert_raises Gandalf::Unauthorized do
-      @controller.authorize! :test, Object
+      @controller.authorize! :test, object
     end
+    assert object.verify
+    assert policy.verify
   end
 
-  test "#can? should call ability's method" do
-    ability = MiniTest::Mock.new
-    ability.expect :can?, true, [:test]
-    @controller.current_ability = ability
-
-    assert @controller.can?(:test)
-    assert ability.verify
+  test "#can? should return true when object has no policy" do
+    assert @controller.can?(:test, Object.new)
   end
 
-  test "#cannot? should call ability's method" do
-    ability = MiniTest::Mock.new
-    ability.expect :cannot?, true, [:test]
-    @controller.current_ability = ability
+  test "#can? should pass current_user as the context" do
+    user = Object.new
+    policy = MiniTest::Mock.new
+    policy.expect :!, false
+    policy.expect :can?, true, [:test, user]
+    object = MiniTest::Mock.new
+    object.expect :to_policy, policy
+    @controller.current_user = user
 
-    assert @controller.cannot?(:test)
-    assert ability.verify
+    assert @controller.can?(:test, object)
+    assert object.verify
+    assert policy.verify
   end
 
+  test "#can? should return false when object has a policy but not permission" do
+    policy = MiniTest::Mock.new
+    policy.expect :!, false
+    policy.expect :can?, false, [:test, Object]
+    object = MiniTest::Mock.new
+    object.expect :to_policy, policy
+
+    refute @controller.can?(:test, object)
+    assert object.verify
+    assert policy.verify
+  end
+
+  test "#can? should call given block when has permission" do
+    policy = MiniTest::Mock.new
+    policy.expect :!, false
+    policy.expect :can?, true, [:test, Object]
+    object = MiniTest::Mock.new
+    object.expect :to_policy, policy
+
+    block_called = false
+    @controller.can?(:test, object) do
+      block_called = true
+    end
+
+    assert block_called
+    assert object.verify
+    assert policy.verify
+  end
+
+  test "#can? should not call given block when has no permission" do
+    policy = MiniTest::Mock.new
+    policy.expect :!, false
+    policy.expect :can?, false, [:test, Object]
+    object = MiniTest::Mock.new
+    object.expect :to_policy, policy
+
+    block_called = false
+    @controller.can?(:test, object) do
+      block_called = true
+    end
+
+    refute block_called
+    assert object.verify
+    assert policy.verify
+  end
+
+  test "#cannot? should return false when object has no policy" do
+    refute @controller.cannot?(:test, Object.new)
+  end
+
+  test "#cannot? should return true when object has policy but not permission" do
+    policy = MiniTest::Mock.new
+    policy.expect :!, false
+    policy.expect :can?, false, [:test, Object]
+    object = MiniTest::Mock.new
+    object.expect :to_policy, policy
+
+    assert @controller.cannot?(:test, object)
+    assert object.verify
+    assert policy.verify
+  end
+
+  test "#cannot? should return false when object has policy and permission" do
+    policy = MiniTest::Mock.new
+    policy.expect :!, false
+    policy.expect :can?, true, [:test, Object]
+    object = MiniTest::Mock.new
+    object.expect :to_policy, policy
+
+    refute @controller.cannot?(:test, object)
+    assert object.verify
+    assert policy.verify
+  end
+
+  test "#cannot? should call given block when does not have permission" do
+    policy = MiniTest::Mock.new
+    policy.expect :!, false
+    policy.expect :can?, false, [:test, Object]
+    object = MiniTest::Mock.new
+    object.expect :to_policy, policy
+
+    block_called = false
+    @controller.cannot?(:test, object) do
+      block_called = true
+    end
+
+    assert block_called
+    assert object.verify
+    assert policy.verify
+  end
+
+  test "#can? should not call given block when does have permission" do
+    policy = MiniTest::Mock.new
+    policy.expect :!, false
+    policy.expect :can?, true, [:test, Object]
+    object = MiniTest::Mock.new
+    object.expect :to_policy, policy
+
+    block_called = false
+    @controller.cannot?(:test, object) do
+      block_called = true
+    end
+
+    refute block_called
+    assert object.verify
+    assert policy.verify
+  end
 end
